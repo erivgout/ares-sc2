@@ -4,7 +4,7 @@ version = "3.3.0"
 description = ""
 authors = ["Tom Kerr <tomkerrdev@gmail.com>, Paul <paul@ares.com>"]
 readme = "README.md"
-packages = [{include = "src/ares"}]
+packages = [{ include = "ares", from = "src" }]
 homepage = "https://github.com/AresSC2/ares-sc2"
 repository = "https://github.com/AresSC2/ares-sc2"
 license = "MIT"
