@@ -1,6 +1,7 @@
 """Extension of sc2.BotAI to add custom functions.
 
 """
+from contextlib import suppress
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -11,10 +12,17 @@ from s2clientprotocol import sc2api_pb2 as sc_pb
 from s2clientprotocol import ui_pb2 as ui_pb
 from sc2.bot_ai import BotAI
 from sc2.constants import EQUIVALENTS_FOR_TECH_PROGRESS
+from sc2.data import Race
+from sc2.dicts.unit_research_abilities import RESEARCH_INFO
 from sc2.dicts.upgrade_researched_from import UPGRADE_RESEARCHED_FROM
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as UnitID
 from sc2.ids.upgrade_id import UpgradeId
+
+# Upgrades missing from the auto-generated UPGRADE_RESEARCHED_FROM dict.
+_EXTRA_UPGRADE_RESEARCHED_FROM: dict[UpgradeId, UnitID] = {
+    UpgradeId.REAPERSPEED: UnitID.BARRACKSTECHLAB,
+}
 from sc2.position import Point2, Point3
 from sc2.unit import Unit
 from sc2.units import Units
@@ -60,6 +68,49 @@ class CustomBotAI(BotAI):
 
         """
         pass
+
+    @staticmethod
+    def prevent_double_actions(action) -> bool:
+        """Guard against unknown ability ids in unit orders."""
+        # prevent move command if unit is already at target position
+        with suppress(AttributeError):
+            # moving to a position
+            if action.ability in {AbilityId.MOVE_MOVE, AbilityId.ATTACK} and hasattr(
+                action.target, "x"
+            ):
+                if round(action.target[0]) == round(
+                    action.unit.position[0]
+                ) and round(action.target[1]) == round(action.unit.position[1]):
+                    return False
+
+        try:
+            orders = action.unit.orders
+        except KeyError:
+            # Unknown ability id in orders; allow the action and avoid crash.
+            return True
+
+        if orders:
+            # action: UnitCommand
+            # current_action: UnitOrder
+            for current_action in orders:
+                if (
+                    current_action.ability.id != action.ability
+                    and current_action.ability.exact_id != action.ability
+                ):
+                    # Different action, return True
+                    return True
+                with suppress(AttributeError):
+                    if current_action.target == action.target.tag:
+                        # Same action, remove action if same target unit
+                        return False
+                with suppress(AttributeError):
+                    if round(action.target.x) == round(
+                        current_action.target.x
+                    ) and round(action.target.y) == round(current_action.target.y):
+                        # Same action, remove action if same target position
+                        return False
+                return True
+        return True
 
     def draw_text_on_world(
         self,
@@ -158,7 +209,11 @@ class CustomBotAI(BotAI):
             upgrade_id.value
         ].research_ability.exact_id
 
-        researched_from: UnitID = UPGRADE_RESEARCHED_FROM[upgrade_id]
+        researched_from: UnitID = UPGRADE_RESEARCHED_FROM.get(
+            upgrade_id, _EXTRA_UPGRADE_RESEARCHED_FROM.get(upgrade_id)
+        )
+        if researched_from is None:
+            return False
         upgrade_from_structures: Units = self.mediator.get_own_structures_dict[
             researched_from
         ]
@@ -168,6 +223,60 @@ class CustomBotAI(BotAI):
                 if order.ability.exact_id == creationAbilityID:
                     return True
 
+        return False
+
+    def research(self, upgrade_type: UpgradeId) -> bool:
+        researched_from: UnitID | None = UPGRADE_RESEARCHED_FROM.get(
+            upgrade_type, _EXTRA_UPGRADE_RESEARCHED_FROM.get(upgrade_type)
+        )
+        if researched_from is None:
+            logger.warning(
+                f"Unknown upgrade {upgrade_type} in research map, skipping."
+            )
+            return False
+
+        if not self.can_afford(upgrade_type):
+            return False
+
+        if upgrade_type not in RESEARCH_INFO.get(researched_from, {}):
+            logger.warning(
+                f"Upgrade {upgrade_type} missing from RESEARCH_INFO for {researched_from}"
+            )
+            return False
+
+        required_tech_building: UnitID | None = RESEARCH_INFO[researched_from][
+            upgrade_type
+        ].get("required_building", None)
+        if required_tech_building and (
+            self.structure_type_build_progress(required_tech_building) != 1.0
+        ):
+            return False
+
+        is_protoss = self.race == Race.Protoss
+        equiv_structures = {
+            UnitID.SPIRE: {UnitID.SPIRE, UnitID.GREATERSPIRE},
+            UnitID.GREATERSPIRE: {UnitID.SPIRE, UnitID.GREATERSPIRE},
+            UnitID.HATCHERY: {UnitID.HATCHERY, UnitID.LAIR, UnitID.HIVE},
+            UnitID.LAIR: {UnitID.HATCHERY, UnitID.LAIR, UnitID.HIVE},
+            UnitID.HIVE: {UnitID.HATCHERY, UnitID.LAIR, UnitID.HIVE},
+        }
+        research_structure_types: set[UnitID] = equiv_structures.get(
+            researched_from, {researched_from}
+        )
+
+        for structure in self.structures:
+            if (
+                structure.type_id in research_structure_types
+                and structure.tag not in self.unit_tags_received_action
+                and structure.is_ready
+                and structure.is_idle
+                and (not is_protoss or structure.is_powered)
+            ):
+                return self.do(
+                    structure.research(upgrade_type),
+                    subtract_cost=True,
+                    ignore_warning=True,
+                )
         return False
 
     def split_ground_fliers(

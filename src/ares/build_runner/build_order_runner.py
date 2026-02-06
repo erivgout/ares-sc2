@@ -339,13 +339,17 @@ class BuildOrderRunner:
                     )
                     if worker:
                         self.current_build_position = next_building_position
-
+                        assign_role = (
+                            worker.tag
+                            in self.mediator.get_unit_role_dict[UnitRole.GATHERING]
+                            or worker.tag
+                            in self.mediator.get_unit_role_dict[UnitRole.IDLE]
+                        )
                         if self.mediator.build_with_specific_worker(
                             worker=worker,
                             structure_type=command,
                             pos=self.current_build_position,
-                            assign_role=worker.tag
-                            in self.mediator.get_unit_role_dict[UnitRole.GATHERING],
+                            assign_role=assign_role,
                         ):
                             self.current_step_started = True
                     elif command in STRUCTURE_TO_BUILDING_SIZE:
@@ -470,12 +474,17 @@ class BuildOrderRunner:
                             step.command, step.target
                         ):
                             self.current_build_position = next_building_position
+                            assign_role = (
+                                worker.tag
+                                in self.mediator.get_unit_role_dict[UnitRole.GATHERING]
+                                or worker.tag
+                                in self.mediator.get_unit_role_dict[UnitRole.IDLE]
+                            )
                             self.mediator.build_with_specific_worker(
                                 worker=worker,
                                 structure_type=command,
                                 pos=self.current_build_position,
-                                assign_role=worker.tag
-                                in self.mediator.get_unit_role_dict[UnitRole.GATHERING],
+                                assign_role=assign_role,
                             )
                 elif command in ADD_ONS and self.ai.can_afford(command):
                     if base_structures := [
@@ -606,6 +615,7 @@ class BuildOrderRunner:
                 pylon_build_progress=0.5,
                 reserve_placement=False,
                 reaper_wall=at_reaper_wall,
+                supply_depot=structure_type == self.ai.supply_type,
             ):
                 return pos
         else:
@@ -774,6 +784,7 @@ class BuildOrderRunner:
                         reserve_placement=False,
                         first_pylon=self.ai.time < 30 and step.command == UnitID.PYLON,
                         wall=True,
+                        supply_depot=True,
                     ),
                     time,
                 )

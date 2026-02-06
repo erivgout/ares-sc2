@@ -27,6 +27,12 @@ from ares.consts import (
 )
 
 
+# Upgrades missing from the auto-generated UPGRADE_RESEARCHED_FROM dict.
+_EXTRA_UPGRADE_RESEARCHED_FROM: dict[UpgradeId, UnitID] = {
+    UpgradeId.REAPERSPEED: UnitID.BARRACKSTECHLAB,
+}
+
+
 @dataclass
 class BuildOrderParser:
     """Parses a build order string into a list of `BuildOrderStep`.
@@ -306,7 +312,15 @@ class BuildOrderParser:
         BuildOrderStep :
             A new build step to put in a build order.
         """
-        researched_from: UnitID = UPGRADE_RESEARCHED_FROM[upgrade_id]
+        researched_from: UnitID = UPGRADE_RESEARCHED_FROM.get(
+            upgrade_id,
+            _EXTRA_UPGRADE_RESEARCHED_FROM.get(upgrade_id),
+        )
+        if researched_from is None:
+            raise KeyError(
+                f"Don't know where {upgrade_id} is researched from. "
+                f"Add it to _EXTRA_UPGRADE_RESEARCHED_FROM in BuildOrderParser."
+            )
         return lambda: BuildOrderStep(
             command=upgrade_id,
             start_condition=lambda: self.ai.can_afford(upgrade_id)

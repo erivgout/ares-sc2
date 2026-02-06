@@ -1285,12 +1285,14 @@ class PlacementManager(Manager, IManagerMediator):
             el,
             corner_positions[0],
             wall=True,
+            supply_depot=True,
         )
         self._add_placement_position(
             BuildingSize.TWO_BY_TWO,
             el,
             corner_positions[1],
             wall=True,
+            supply_depot=True,
         )
         ramp_3x3_x = int(ramp.barracks_correct_placement.x - 1.5)
         ramp_3x3_y = int(ramp.barracks_correct_placement.y - 1.5)

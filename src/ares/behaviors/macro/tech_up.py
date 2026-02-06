@@ -7,6 +7,11 @@ from sc2.dicts.upgrade_researched_from import UPGRADE_RESEARCHED_FROM
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as UnitID
 from sc2.ids.upgrade_id import UpgradeId
+
+# Upgrades missing from the auto-generated UPGRADE_RESEARCHED_FROM dict.
+_EXTRA_UPGRADE_RESEARCHED_FROM: dict[UpgradeId, UnitID] = {
+    UpgradeId.REAPERSPEED: UnitID.BARRACKSTECHLAB,
+}
 from sc2.position import Point2
 from sc2.unit import Unit
 
@@ -67,7 +72,15 @@ class TechUp(MacroBehavior):
         researched_from_id: UnitID
         tech_required: list[UnitID]
         if isinstance(self.desired_tech, UpgradeId):
-            researched_from_id = UPGRADE_RESEARCHED_FROM[self.desired_tech]
+            researched_from_id = UPGRADE_RESEARCHED_FROM.get(
+                self.desired_tech,
+                _EXTRA_UPGRADE_RESEARCHED_FROM.get(self.desired_tech),
+            )
+            if researched_from_id is None:
+                logger.warning(
+                    f"Don't know where {self.desired_tech} is researched from."
+                )
+                return False
             tech_required = UNIT_TECH_REQUIREMENT[researched_from_id]
         else:
             if self.desired_tech in ALL_STRUCTURES:

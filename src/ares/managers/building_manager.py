@@ -225,7 +225,12 @@ class BuildingManager(Manager, IManagerMediator):
 
             # leave the worker alone
             # TODO: Low health scv could flee in this if block
-            if worker.is_constructing_scv:
+            try:
+                is_constructing = worker.is_constructing_scv
+            except KeyError:
+                is_constructing = False
+
+            if is_constructing:
                 continue
 
             # this happens if no target location is available eg: all expansions taken
@@ -277,7 +282,10 @@ class BuildingManager(Manager, IManagerMediator):
                     distance = 4.5
 
             if cy_distance_to(worker.position, target.position) > distance:
-                order_target: Union[int, Point2, None] = worker.order_target
+                try:
+                    order_target: Union[int, Point2, None] = worker.order_target
+                except KeyError:
+                    order_target = None
                 point: Point2 = self.manager_mediator.find_path_next_point(
                     start=worker.position,
                     target=target.position,
@@ -334,11 +342,16 @@ class BuildingManager(Manager, IManagerMediator):
                             )
                         continue
 
-                if (
-                    (not worker.is_constructing_scv or worker.is_idle)
-                    and self.ai.can_afford(structure_id)
-                    and self.ai.tech_requirement_progress(structure_id) == 1.0
-                ):
+                try:
+                    can_build = (
+                        (not worker.is_constructing_scv or worker.is_idle)
+                        and self.ai.can_afford(structure_id)
+                        and self.ai.tech_requirement_progress(structure_id) == 1.0
+                    )
+                except KeyError:
+                    can_build = False
+
+                if can_build:
                     worker.build(structure_id, target)
 
         for tag in tags_to_remove:

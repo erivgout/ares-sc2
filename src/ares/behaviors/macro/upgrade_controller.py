@@ -8,6 +8,11 @@ from sc2.dicts.upgrade_researched_from import UPGRADE_RESEARCHED_FROM
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as UnitID
 from sc2.ids.upgrade_id import UpgradeId
+
+# Upgrades missing from the auto-generated UPGRADE_RESEARCHED_FROM dict.
+_EXTRA_UPGRADE_RESEARCHED_FROM: dict[UpgradeId, UnitID] = {
+    UpgradeId.REAPERSPEED: UnitID.BARRACKSTECHLAB,
+}
 from sc2.position import Point2
 from sc2.unit import Unit
 
@@ -66,7 +71,14 @@ class UpgradeController(MacroBehavior):
             if ai.pending_or_complete_upgrade(upgrade):
                 continue
 
-            researched_from_id: UnitID = UPGRADE_RESEARCHED_FROM[upgrade]
+            researched_from_id: UnitID = UPGRADE_RESEARCHED_FROM.get(
+                upgrade, _EXTRA_UPGRADE_RESEARCHED_FROM.get(upgrade)
+            )
+            if researched_from_id is None:
+                logger.warning(
+                    f"Don't know where {upgrade} is researched from, skipping."
+                )
+                continue
             researched_from: list[Unit] = [
                 s for s in mediator.get_own_structures_dict[researched_from_id]
             ]
